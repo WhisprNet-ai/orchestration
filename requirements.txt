@@ -1,0 +1,7 @@
+langchain>=0.3.26
+langchain-core>=0.3.66
+langchain-nvidia-ai-endpoints>=0.3.10
+langchain-community>=0.0.36  
+chromadb>=0.4.24
+python-dotenv
+uuid
