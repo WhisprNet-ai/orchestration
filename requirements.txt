@@ -1,0 +1,33 @@
+# Flask and web framework
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# Slack SDK and Bolt
+slack-bolt==1.18.1
+slack-sdk>=3.25.0,<4.0.0  # compatible with slack-bolt 1.18.1
+
+# HTTP requests for ML model communication
+requests==2.31.0
+urllib3==2.0.7
+
+# Environment variable management
+python-dotenv==1.0.0
+
+# Production WSGI server (optional, for production deployment)
+gunicorn==21.2.0
+
+# Development and testing
+pytest==7.4.2
+pytest-cov==4.1.0
+pytest-mock==3.11.1
+
+# Code quality and formatting
+black==23.9.1
+flake8==6.1.0
+mypy==1.5.1
+
+# Logging and monitoring
+structlog==23.1.0
+
+# Type hints
+typing-extensions==4.8.0
