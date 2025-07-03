@@ -135,7 +135,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
+__MACOSX
+.qodo
 # Spyder project settings
 .spyderproject
 .spyproject
