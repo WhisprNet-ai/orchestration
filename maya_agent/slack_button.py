@@ -34,6 +34,7 @@ response_values = {}   # job_id → "approve" / "reject" / "edit"
 @app.action("approve_click")
 @app.action("reject_click")
 @app.action("edit_click")
+@app.action("draft_click")
 def handle_button_click(ack, body, client, action):
     ack()
 
@@ -58,11 +59,14 @@ def handle_button_click(ack, body, client, action):
         result_text = f"✅ Thanks for the confirmation, <@{user_id}>. I'm now posting the job on LinkedIn."
         response_values[job_id] = "approve"
     elif clicked_action == "reject_click":
-        result_text = f"❌ No worries <@{user_id}>, I’ve canceled the posting. Just ping me if you want to try again later."
+        result_text = f"❌ No worries <@{user_id}>, I’ve canceled the posting."
         response_values[job_id] = "reject"
-    else:
+    elif clicked_action == "edit_click":
         result_text = f"✏️ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
+    else:
+        result_text = f" Fine <@{user_id}>, I've put this in draft. Please ping me if want to post it again."
+        response_values[job_id] = "draft"
 
     # Unblock the waiting thread
     if job_id in response_events:
@@ -106,6 +110,8 @@ def send_job_desc(CHANNEL_ID, JOB_DESC, job_id, user_name, user_id):
                     {"type": "button", "text": {"type": "plain_text", "text": "Yes"}, "action_id": "approve_click"},
                     {"type": "button", "text": {"type": "plain_text", "text": "No"}, "action_id": "reject_click"},
                     {"type": "button", "text": {"type": "plain_text", "text": "Edit"}, "action_id": "edit_click"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Draft"}, "action_id": "draft_click"},
+
                 ]
             }
         ]

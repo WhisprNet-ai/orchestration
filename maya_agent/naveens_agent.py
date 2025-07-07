@@ -20,6 +20,8 @@ from maya_agent.slack_button import app as slack_app, SLACK_APP_TOKEN  # ← re-
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from maya_agent.slack_button import send_job_desc
 from rag_it1.retrieval.vectorstore import get_vectorstore
+from maya_agent.database import insert_draft
+
 Thread(target=lambda: SocketModeHandler(slack_app, SLACK_APP_TOKEN).start(), daemon=True).start()
 
 # ========== Config ==========
@@ -146,9 +148,37 @@ def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
             print("✅ Approved by user. Proceeding...")
             delete_user_data(user_id)
             state["error"] = None
-        else:
-            print(f"🛑 User selected: {action}. Halting job.")
+        elif action == "reject":
+            print("🧹 User rejected. Resetting memory and halting job.")
+            delete_user_data(user_id)
             state["error"] = f"User selected: {action}"
+        elif action =="edit":
+            print("User clicked edit , sent to edit function")
+           # send_to_edit_func(state["job_data"])
+           # delete_user_data(user_id)
+            state["error"] = f"User selected: {action}"
+
+
+        elif action =="draft":
+            print("User selected draft , sennt to draft function")
+            insert_draft(
+                job_id=job_id,  # ← you already generated it before calling send_job_desc
+                user_id=user_id,
+                username=user_name,
+                channel_id=CHANNEL_ID,
+                job_data=job,
+                description=description
+            )
+            delete_user_data(user_id)
+            #send_to_draft_func(state["job_data"])
+           
+
+
+
+           
+            state["error"] = f"User selected: {action}"
+
+      
 
     except Exception as e:
         state["error"] = f"❌ LLM Error: {e}"
