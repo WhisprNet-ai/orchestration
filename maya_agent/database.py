@@ -36,8 +36,24 @@ def create_draft_table():
         )
     """)
 
+    # Create edit_requests table for tracking edit workflows
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS edit_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL,
+            username TEXT,
+            channel_id TEXT,
+            original_job_data TEXT,  -- JSON string of original job data
+            original_description TEXT,
+            edit_status TEXT DEFAULT 'pending',  -- pending, processing, completed
+            timestamp TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
+
 def insert_draft(job_id, user_id, username, channel_id, job_data, description):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -70,6 +86,75 @@ def insert_draft(job_id, user_id, username, channel_id, job_data, description):
         datetime.utcnow().isoformat()
     ))
 
+    conn.commit()
+    conn.close()
+
+def insert_edit_request(job_id, user_id, username, channel_id, job_data, description):
+    """Insert an edit request into the database"""
+    import json
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO edit_requests (
+            job_id, user_id, username, channel_id, original_job_data, 
+            original_description, edit_status, timestamp
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        job_id,
+        user_id,
+        username,
+        channel_id,
+        json.dumps(job_data),  # Store job_data as JSON string
+        description,
+        'pending',
+        datetime.utcnow().isoformat()
+    ))
+
+    conn.commit()
+    conn.close()
+
+def get_edit_request(job_id):
+    """Retrieve an edit request by job_id"""
+    import json
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM edit_requests WHERE job_id = ?", (job_id,))
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if row:
+        columns = [desc[0] for desc in cursor.description]
+        result = dict(zip(columns, row))
+        # Parse the JSON string back to dict
+        result['original_job_data'] = json.loads(result['original_job_data'])
+        return result
+    else:
+        return None
+
+def update_edit_status(job_id, status):
+    """Update the status of an edit request"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE edit_requests 
+        SET edit_status = ? 
+        WHERE job_id = ?
+    """, (status, job_id))
+
+    conn.commit()
+    conn.close()
+
+def delete_edit_request(job_id):
+    """Delete an edit request"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM edit_requests WHERE job_id = ?", (job_id,))
+    
     conn.commit()
     conn.close()
 

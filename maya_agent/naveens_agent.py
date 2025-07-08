@@ -1,5 +1,6 @@
 import os
 import requests
+from typing import TypedDict, Optional, Any
 
 from dotenv import load_dotenv
 
@@ -21,6 +22,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from maya_agent.slack_button import send_job_desc
 from rag_it1.retrieval.vectorstore import get_vectorstore
 from maya_agent.database import insert_draft
+from maya_agent.edit_pipeline import initiate_edit_workflow, process_edit_feedback, cleanup_edit_workflow
 
 Thread(target=lambda: SocketModeHandler(slack_app, SLACK_APP_TOKEN).start(), daemon=True).start()
 
@@ -50,6 +52,13 @@ def send_slack_message(text):#Add Channel_id as a paramater
 user_id = None
 user_name = None
 
+# ========== State Schema ==========
+class AgentState(TypedDict):
+    job_data: dict[str, Any]
+    error: Optional[str]
+    job_result: str
+    edit_workflow_active: Optional[bool]
+
 # ========== Node: Job Requirement Validation ==========
 REQUIRED_FIELDS = [
     "job_title", "company", "job_type",
@@ -74,7 +83,7 @@ def delete_user_data(user_id: str):
         print(f"❌ Failed to delete data for user_id: {user_id} - {str(e)}")
         return {"status": "error", "user_id": user_id, "error": str(e)}
 
-def job_req(state: dict) -> dict:
+def job_req(state: AgentState) -> AgentState:
     print("🛡 [job_req] Checking required fields...")
 
     job = state.get("job_data", {})
@@ -112,7 +121,7 @@ def job_req(state: dict) -> dict:
 
 
 # ========== Node: Job Description ==========
-def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
+def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a parameter
     print("🧠 [job_description_llm]")
 
     job = state.get("job_data", {})
@@ -131,6 +140,8 @@ def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
     )
 
     try:
+        if not OLLAMA_URL:
+            raise ValueError("OLLAMA_URL environment variable is not set")
         res = requests.post(OLLAMA_URL, json={
             "model": "llama3.2:1b",
             "prompt": prompt,
@@ -146,17 +157,36 @@ def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
 
         if action == "approve":
             print("✅ Approved by user. Proceeding...")
-            delete_user_data(user_id)
+            if user_id:
+                delete_user_data(user_id)
             state["error"] = None
         elif action == "reject":
             print("🧹 User rejected. Resetting memory and halting job.")
-            delete_user_data(user_id)
+            if user_id:
+                delete_user_data(user_id)
             state["error"] = f"User selected: {action}"
         elif action =="edit":
-            print("User clicked edit , sent to edit function")
-           # send_to_edit_func(state["job_data"])
-           # delete_user_data(user_id)
-            state["error"] = f"User selected: {action}"
+            print("User clicked edit, initiating edit workflow")
+            if user_id and user_name and CHANNEL_ID:
+                edit_result = initiate_edit_workflow(
+                    job_id=job_id,
+                    user_id=user_id,
+                    username=user_name,
+                    channel_id=CHANNEL_ID,
+                    job_data=job,
+                    description=description
+                )
+                
+                if edit_result["status"] == "success":
+                    # Send the message to user asking for feedback
+                    message = f"✏ <@{user_id}>, I'm ready to help you edit the job description. Please tell me what changes you'd like to make (e.g., 'Change the title to Senior Developer' or 'Update skills to include React')."
+                    send_slack_message(message)
+                    state["error"] = None
+                    state["edit_workflow_active"] = True
+                else:
+                    state["error"] = f"Failed to initiate edit: {edit_result['message']}"
+            else:
+                state["error"] = "Missing user information for edit workflow"
 
 
         elif action =="draft":
@@ -169,7 +199,8 @@ def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
                 job_data=job,
                 description=description
             )
-            delete_user_data(user_id)
+            if user_id:
+                delete_user_data(user_id)
             #send_to_draft_func(state["job_data"])
            
 
@@ -188,7 +219,7 @@ def job_description_llm(state: dict) -> dict:#add Channel id as a parameter
     return state
 
 # ========== Node: Post Job ==========
-def post_job_to_linkedin(state: dict) -> dict:
+def post_job_to_linkedin(state: AgentState) -> AgentState:
     print("🚀 [post_job_to_linkedin]")
 
     job = state.get("job_data", {})
@@ -252,13 +283,13 @@ def post_job_to_linkedin(state: dict) -> dict:
     return state
 
 # ========== Node: Finalize ==========
-def finalize(state: dict) -> dict:
+def finalize(state: AgentState) -> AgentState:
     print("✅ [finalize]")
     print(f"📤 {state.get('job_result')}")
     return state
 
 # ========== Build Graph ==========
-graph = StateGraph(dict)
+graph = StateGraph(AgentState)
 graph.add_node("job_req", job_req)
 graph.add_node("job_description_llm", job_description_llm)
 graph.add_node("post_job", post_job_to_linkedin)
@@ -302,22 +333,15 @@ def naveen(input_json):#Add Channel_id as a parameter
     user_id = input_json["user_id"]
     user_name = input_json["username"]
     CHANNEL_ID=input_json["channel_id"]
-    try:
-        # Directly access "entities" since it's top-level in input_json
-        entities = input_json.get("entities", {})  
-        input_state = {
-            "job_data": entities,
-            "error": None,
-            "job_result": ""
-        }
-        print(f"Parsed entities: {entities}")
-    except Exception as e:
-        input_state = {
-            "job_data": {}, 
-            "error": f"Exception: {e}",
-            "job_result": f"Exception: {e}"
-        }
-        print(f"Error parsing input: {e}")
+    # Directly access "entities" since it's top-level in input_json
+    entities = input_json.get("entities", {})  
+    input_state: AgentState = {
+        "job_data": entities,
+        "error": None,
+        "job_result": "",
+        "edit_workflow_active": None
+    }
+    print(f"Parsed entities: {entities}")
 
     print("Input to LangGraph:", input_state)
 
@@ -325,4 +349,3 @@ def naveen(input_json):#Add Channel_id as a parameter
     result = app.invoke(input_state)
     print(f"LangGraph result: {result}")
     return result
-

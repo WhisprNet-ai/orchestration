@@ -1,6 +1,5 @@
 #gives warning
 
-
 import os
 import time
 import uuid
@@ -44,10 +43,12 @@ def handle_button_click(ack, body, client, action):
         job_id = block_metadata.get("job_id")
         user_name = block_metadata.get("user_name", "user")
         user_id= block_metadata.get("user_id","123")
+        is_edit_workflow = block_metadata.get("is_edit_workflow", False)  # New flag for edit workflow
     except Exception as e:
         print("⚠ Failed to parse block_id metadata:", e)
         job_id = "unknown"
         user_name = "user"
+        is_edit_workflow = False
 
     clicked_action = action["action_id"]
     message_ts = body["message"]["ts"]
@@ -62,7 +63,7 @@ def handle_button_click(ack, body, client, action):
         result_text = f"❌ No worries <@{user_id}>, I’ve canceled the posting."
         response_values[job_id] = "reject"
     elif clicked_action == "edit_click":
-        result_text = f"✏️ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
+        result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
     else:
         result_text = f" Fine <@{user_id}>, I've put this in draft. Please ping me if want to post it again."
@@ -123,4 +124,3 @@ def send_job_desc(CHANNEL_ID, JOB_DESC, job_id, user_name, user_id):
     action = response_values.get(job_id, None)
     print(f"✅ Response for job_id {job_id}: {action}")
     return action
-
