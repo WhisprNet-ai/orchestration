@@ -190,7 +190,7 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
 
 
         elif action =="draft":
-            print("User selected draft , sennt to draft function")
+            print("User selected draft, sent to draft function")
             insert_draft(
                 job_id=job_id,  # ← you already generated it before calling send_job_desc
                 user_id=user_id,
@@ -201,13 +201,22 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
             )
             if user_id:
                 delete_user_data(user_id)
-            #send_to_draft_func(state["job_data"])
-           
-
-
-
-           
+            
+            # Send confirmation message to Slack
+            draft_confirmation = f"✅ <@{user_id}>, your job posting has been saved as a draft!\n\n" \
+                               f"📋 **Draft Details:**\n" \
+                               f"• Job Title: {job.get('job_title', 'N/A')}\n" \
+                               f"• Company: {job.get('company', 'N/A')}\n" \
+                               f"• Job ID: `{job_id}`\n\n" \
+                               f"💡 **To manage your drafts:**\n" \
+                               f"• Say \"show my posts\" to view all your drafts\n" \
+                               f"• Say \"edit {job_id}\" to modify this draft\n" \
+                               f"• Say \"delete {job_id}\" to remove this draft"
+            
+            send_slack_message(draft_confirmation)
+            # Set error to stop workflow from proceeding to LinkedIn posting
             state["error"] = f"User selected: {action}"
+            state["job_result"] = f"Draft saved successfully: {job_id}"
 
       
 

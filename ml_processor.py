@@ -28,7 +28,7 @@ class MLProcessor:
         self.session.mount('http://', retry_adapter)
         self.session.mount('https://', retry_adapter)
 
-    def process_messages(self, messages: List[SlackMessage]) -> str:
+    def process_messages(self, messages: List[SlackMessage], slack_handler=None) -> str:
         if not messages:
             raise MLProcessorError("No messages to process")
         
@@ -43,12 +43,12 @@ class MLProcessor:
                 logger.warning(f"External ML endpoint failed: {endpoint_error}, falling back to local RAG processing")
                 
                 # Fall back to local RAG processing
-                return self._process_locally(payload)
+                return self._process_locally(payload, slack_handler)
                 
         except Exception as e:
             raise MLProcessorError(f"Failed to process messages: {e}")
     
-    def _process_locally(self, payload: Dict) -> str:
+    def _process_locally(self, payload: Dict, slack_handler=None) -> str:
         """Process messages using local RAG pipeline"""
         try:
             print("\n" + "="*80)
@@ -60,7 +60,7 @@ class MLProcessor:
             print("="*80)
             
             # Call the RAG processing function
-            result = formator_llm(payload)
+            result = formator_llm(payload, slack_handler)
             
             print("RAG processing completed successfully")
             logger.info(f"Local RAG processing completed for {payload['batch_size']} messages")
@@ -154,7 +154,7 @@ class MockMLProcessor:
     def __init__(self):
         pass
     
-    def process_messages(self, messages: List[SlackMessage]) -> str:
+    def process_messages(self, messages: List[SlackMessage], slack_handler=None) -> str:
         """Process messages using local RAG pipeline"""
         
         # Create payload structure like real processor
@@ -188,7 +188,7 @@ class MockMLProcessor:
             
             # Call the RAG processing function
             from rag_it1.rag_func import formator_llm
-            result = formator_llm(payload)
+            result = formator_llm(payload, slack_handler)
             
             print("RAG processing completed successfully")
             logger.info(f"Local RAG processing completed for {len(messages)} messages")

@@ -11,6 +11,7 @@ from message_store import MessageStore
 from timer_manager import TimerManager
 from ml_processor import MLProcessor, MockMLProcessor
 from message_recovery import MessageRecovery
+from intent_entity_extractor.extractor import handle_specific_job_action
 
 logger = logging.getLogger(__name__)
 
@@ -279,10 +280,25 @@ class SlackHandler:
         try:
             thread_display = thread_ts or 'main'
             logger.info(f"Starting ML processing for {len(messages)} messages in {channel_id}/{thread_display}")
-            
+
+            # === NEW: Check for specific job actions before ML processing ===
+            if messages and len(messages) == 1:
+                msg = messages[0]
+                user_data = {
+                    'user_id': getattr(msg, 'user_id', None) or msg.get('user_id'),
+                    'username': getattr(msg, 'username', None) or msg.get('username'),
+                    'channel_id': channel_id,
+                    'thread_ts': thread_ts,
+                }
+                original_text = getattr(msg, 'text', None) or msg.get('text', '')
+                if handle_specific_job_action(original_text, user_data, self):
+                    logger.info(f"Handled specific job action for message: {original_text}")
+                    return  # Do not proceed to ML processing
+            # === END NEW ===
+
             # Send to ML processor
             try:
-                ml_response = self.ml_processor.process_messages(messages)
+                ml_response = self.ml_processor.process_messages(messages, slack_handler=self)
                 logger.info(f"ML processing successful for {channel_id}/{thread_display}, response: {ml_response}")
                 
                 # Update message store with ML output

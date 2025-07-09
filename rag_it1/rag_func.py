@@ -22,8 +22,6 @@ project_root = os.path.abspath(os.path.join(current_file, "..", ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-
-
 # Load environment variables
 load_dotenv()
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -34,15 +32,16 @@ formatter_llm = ChatNVIDIA(
     api_key="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"
 )
 
-# Formatting prompt for batching
+# Enhanced formatting prompt for batching with past request detection
 format_prompt = ChatPromptTemplate.from_template("""
-You are a rewriting assistant. Your job is to intelligently combine multiple user messages into one clear, structured, and grammatically correct sentence reflecting the user's job intent.
+You are a rewriting assistant. Your job is to intelligently combine multiple user messages into one clear, structured, and grammatically correct sentence reflecting the user's intent.
 
 Rules:
 - Combine job-related details: role, skills, experience, location, job type.
 - Include **any numeric experience** (e.g. "5 yrs", "3+ years", etc.) even if phrased vaguely.
 - Do NOT skip or assume information — only use what's mentioned.
 - Ignore greetings or casual words like "hi", "hello", "need job".
+- PRESERVE past request keywords like "past", "previous", "history", "drafts", "show me my jobs"
 - Output should be a single clear sentence.
 
 📘 Examples:
@@ -65,6 +64,26 @@ Combined Output:
 "I want a hybrid backend developer role with over 3 years of experience in Node.js."
 
 Messages:
+- "show me"
+- "my past jobs"
+
+Combined Output:
+"Show me my past jobs."
+
+Messages:
+- "what are my drafts"
+
+Combined Output:
+"What are my drafts."
+
+Messages:
+- "job history"
+- "previous postings"
+
+Combined Output:
+"Show me my job history and previous postings."
+
+Messages:
 {messages}
 
 Combined Output:
@@ -85,6 +104,7 @@ Rules:
 - Assume the user is casually expressing their needs or intentions.
 - Correct grammar, spelling, and structure.
 - Preserve all information, especially skills, experience, and job type.
+- PRESERVE past request indicators like "past", "previous", "history", "drafts", "show me my"
 - Do NOT hallucinate or add new info.
 
 Chat History:
@@ -103,6 +123,7 @@ Rules:
 - Expect informal, shorthand, or clumsy user input.
 - Extract meaning and match relevant context.
 - If context lacks required info, respond with: "Sorry, I don't have enough information."
+- If user is asking about past jobs, drafts, or history, acknowledge the request clearly.
 
 Context:
 {context}
@@ -121,6 +142,7 @@ Strict Rules:
 - Only use the information found in `formatted_query` and `chat_context`.
 - Do NOT invent or guess anything.
 - Combine related data (skills, experience, job type) logically.
+- PRESERVE past request keywords like "past", "previous", "history", "drafts", "show me my"
 - Output only one sentence.
 
 Formatted Query:
@@ -144,38 +166,37 @@ Final Intent:
             filter={"user_id": user_id}
         )
 
-        # chat_context = ""
-        # is_duplicate = any(score > 0.9 for _, score in similar_docs)
-
-        # if is_duplicate:
-        #     matched_doc = similar_docs[0][0]
-        #     matching_docs = vectorstore.similarity_search(
-        #         query=matched_doc.page_content,
-        #         k=10,
-        #         filter={"user_id": user_id}
-        #     )
-        #     chat_context = "\n".join([d.page_content for d in matching_docs])
-        # else:
+        # Get chat context - all previous user conversations
         try:
             collection = vectorstore._collection
             user_docs = collection.get(where={"user_id": user_id})
-            chat_context = "\n".join(user_docs.get("documents", [])) if user_docs else ""
-            print("retriveing past data from rag")
+            documents = user_docs.get("documents", []) if user_docs else []
+            chat_context = "\n".join([getattr(doc, 'page_content', str(doc)) for doc in documents]) if documents else ""
+            print("retrieving past data from rag")
             print(chat_context)
             print("#####")
         except Exception:
             chat_context = ""
 
-        vectorstore.add_documents([
-            Document(
-                page_content=formatted_query,
-                metadata={
-                    "user_id": user_id,
-                    "chat_id": str(uuid.uuid4()),
-                    "timestamp": datetime.datetime.now().isoformat()
-                }
-            )
-        ])
+        # Only store the document if it's not a past request query
+        # (we don't want to store "show me my drafts" as a job requirement)
+        past_request_indicators = ["past", "previous", "history", "drafts", "show me my", "what are my"]
+        is_past_request = any(indicator in formatted_query.lower() for indicator in past_request_indicators)
+        
+        if not is_past_request:
+            vectorstore.add_documents([
+                Document(
+                    page_content=formatted_query,
+                    metadata={
+                        "user_id": user_id,
+                        "chat_id": str(uuid.uuid4()),
+                        "timestamp": datetime.datetime.now().isoformat()
+                    }
+                )
+            ])
+            print(f"✅ Stored new job requirement: {formatted_query}")
+        else:
+            print(f"🔍 Past request detected, not storing: {formatted_query}")
 
         # Generate final RAG response
         rag_result = rag_chain.invoke({
@@ -194,13 +215,42 @@ Final Intent:
         return {
             "formatted_query": formatted_query,
             "chat_context": chat_context,
-            "response": final_output
+            "response": final_output,
+            "is_past_request": is_past_request
         }
 
     return process_user_input
 
 
-def process_messages(json_data: dict) -> list:
+def is_past_request_query(messages: list) -> bool:
+    """
+    Check if the user messages indicate a past request query
+    """
+    combined_text = " ".join(messages).lower()
+    past_indicators = [
+        "past", "previous", "history", "drafts", "show me my", 
+        "what are my", "my jobs", "old jobs", "earlier", "before"
+    ]
+    return any(indicator in combined_text for indicator in past_indicators)
+
+
+def is_specific_job_action(messages: list) -> bool:
+    """
+    Check if the user messages indicate a specific job action (show/edit/delete job_id)
+    """
+    combined_text = " ".join(messages).lower()
+    # Patterns that match both job_xxx and xxx formats, with optional space or underscore
+    edit_pattern = r'edit[\s_]+(job_)?([a-zA-Z0-9_]{4,})'
+    delete_pattern = r'delete[\s_]+(job_)?([a-zA-Z0-9_]{4,})'
+    show_pattern = r'show[\s_]+(job_)?([a-zA-Z0-9_]{4,})'
+    
+    import re
+    return bool(re.search(edit_pattern, combined_text) or 
+               re.search(delete_pattern, combined_text) or 
+               re.search(show_pattern, combined_text))
+
+
+def process_messages(json_data: dict, slack_handler=None) -> list:
     messages = json_data.get("messages", [])
     user_messages = defaultdict(list)
     user_meta = {}
@@ -228,29 +278,62 @@ def process_messages(json_data: dict) -> list:
 
     for user_id, message_list in user_messages.items():
         try:
-            combined_text = "\n- " + "\n- ".join(message_list)
-            formatted_query = formatter_llm.invoke(
-                format_prompt.format(messages=combined_text)
-            ).content
+            # Check if this is a specific job action - if so, bypass formatter LLM
+            is_specific_action = is_specific_job_action(message_list)
+            print(f"🔍 Is specific job action for user {user_id}: {is_specific_action}")
+            
+            if is_specific_action:
+                # For specific job actions, use the original message directly
+                print(f"🚫 Bypassing formatter LLM for specific job action: {message_list}")
+                user_meta[user_id]["response"] = " ".join(message_list)  # Use original message
+                user_meta[user_id]["is_past_request"] = False
+                user_meta[user_id]["text"] = " ".join(message_list)
+                user_meta[user_id]["is_specific_job_action"] = True
+                
+                print(f"📝 User {user_id} processed (specific job action):")
+                print(f"   - Original messages: {message_list}")
+                print(f"   - Response: {user_meta[user_id]['response']}")
+            else:
+                # Check if this is a past request before processing
+                is_past_req = is_past_request_query(message_list)
+                print(f"🔍 Is past request for user {user_id}: {is_past_req}")
+                
+                combined_text = "\n- " + "\n- ".join(message_list)
+                formatted_query = formatter_llm.invoke(
+                    format_prompt.format(messages=combined_text)
+                ).content
 
-            if user_id not in handlers:
-                handlers[user_id] = get_rag_chain(user_id)
+                if user_id not in handlers:
+                    handlers[user_id] = get_rag_chain(user_id)
 
-            response_data = handlers[user_id](formatted_query)
-            user_meta[user_id]["response"] = response_data.get("response", "")
+                response_data = handlers[user_id](formatted_query)
+                user_meta[user_id]["response"] = response_data.get("response", "")
+                user_meta[user_id]["is_past_request"] = response_data.get("is_past_request", False)
+                # Store original message text for pattern matching
+                user_meta[user_id]["text"] = " ".join(message_list)
+                user_meta[user_id]["is_specific_job_action"] = False
+
+                print(f"📝 User {user_id} processed:")
+                print(f"   - Original messages: {message_list}")
+                print(f"   - Formatted query: {formatted_query}")
+                print(f"   - Is past request: {response_data.get('is_past_request', False)}")
+                print(f"   - Response: {response_data.get('response', '')[:100]}...")
 
         except Exception as e:
             user_meta[user_id]["response"] = f"Error: {str(e)}"
+            user_meta[user_id]["is_past_request"] = False
+            user_meta[user_id]["is_specific_job_action"] = False
+            print(f"❌ Error processing user {user_id}: {e}")
 
         results.append(user_meta[user_id])
-        print(results)
 
-    intent_entity_processor(results)
+    print(f"🚀 Sending {len(results)} results to intent_entity_processor")
+    intent_entity_processor(results, slack_handler)
+    return results
 
 
 # CLI usage
-def formator_llm(input_data):
-    
-    output = process_messages(input_data)
+def formator_llm(input_data, slack_handler=None):
+    output = process_messages(input_data, slack_handler)
     print(json.dumps(output, indent=2))
-
+    return output

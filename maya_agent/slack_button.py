@@ -65,9 +65,12 @@ def handle_button_click(ack, body, client, action):
     elif clicked_action == "edit_click":
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
-    else:
-        result_text = f" Fine <@{user_id}>, I've put this in draft. Please ping me if want to post it again."
+    elif clicked_action == "draft_click":
+        result_text = f"📋 Got it <@{user_id}>, I'm saving this as a draft. You'll get a confirmation shortly."
         response_values[job_id] = "draft"
+    else:
+        result_text = f"❓ Unknown action clicked."
+        response_values[job_id] = "unknown"
 
     # Unblock the waiting thread
     if job_id in response_events:
