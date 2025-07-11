@@ -28,6 +28,7 @@ app = App(token=SLACK_BOT_TOKEN)
 
 response_events = {}   # job_id → Event object
 response_values = {}   # job_id → "approve" / "reject" / "edit"
+job_storage = {}       # job_id → job_description storage
 
 # ====== Button Click Handler ======
 @app.action("approve_click")
@@ -63,6 +64,36 @@ def handle_button_click(ack, body, client, action):
         result_text = f"❌ No worries <@{user_id}>, I’ve canceled the posting."
         response_values[job_id] = "reject"
     elif clicked_action == "edit_click":
+        # Get the original job description from job storage
+        original_job_desc = job_storage.get(job_id, "")
+        
+        # Fix the file path to access edit_mode.json from root directory
+        edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
+        try:
+            with open(edit_mode_path,'r') as f:
+                content = f.read().strip()
+                if not content:
+                    # File is empty, initialize with empty dict
+                    edit_mode = {}
+                else:
+                    edit_mode = json.loads(content)
+        except FileNotFoundError:
+            # File doesn't exist, create with empty dict
+            edit_mode = {}
+        except json.JSONDecodeError as e:
+            print(f"Warning: Invalid JSON in edit_mode.json: {e}")
+            edit_mode = {}
+        
+        # Store both status and the original message to be edited
+        edit_mode[user_id] = {
+            "status": True,
+            "message": original_job_desc,
+            "job_id": job_id
+        }
+        
+        with open(edit_mode_path,'w') as f:
+            json.dump(edit_mode,f)
+        
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
     elif clicked_action == "draft_click":
@@ -94,9 +125,16 @@ def send_job_desc(CHANNEL_ID, JOB_DESC, job_id, user_name, user_id):
     event = Event()
     response_events[job_id] = event
     response_values[job_id] = None
+    
+    # Store job description in global storage
+    job_storage[job_id] = JOB_DESC
 
-    # 👉 Encode user info into block_id as JSON
-    block_metadata = json.dumps({"job_id": job_id, "user_name": user_name,"user_id": user_id})
+    # 👉 Encode user info into block_id as JSON (removed job_desc to fix character limit)
+    block_metadata = json.dumps({
+        "job_id": job_id, 
+        "user_name": user_name,
+        "user_id": user_id
+    })
 
     print(f"📤 Posting to Slack | job_id: {job_id}")
     client.chat_postMessage(

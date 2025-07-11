@@ -22,7 +22,6 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from maya_agent.slack_button import send_job_desc
 from rag_it1.retrieval.vectorstore import get_vectorstore
 from maya_agent.database import insert_draft
-from maya_agent.edit_pipeline import initiate_edit_workflow, process_edit_feedback, cleanup_edit_workflow
 
 Thread(target=lambda: SocketModeHandler(slack_app, SLACK_APP_TOKEN).start(), daemon=True).start()
 
@@ -160,33 +159,18 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
             if user_id:
                 delete_user_data(user_id)
             state["error"] = None
+            
         elif action == "reject":
             print("🧹 User rejected. Resetting memory and halting job.")
             if user_id:
                 delete_user_data(user_id)
             state["error"] = f"User selected: {action}"
+
         elif action =="edit":
             print("User clicked edit, initiating edit workflow")
-            if user_id and user_name and CHANNEL_ID:
-                edit_result = initiate_edit_workflow(
-                    job_id=job_id,
-                    user_id=user_id,
-                    username=user_name,
-                    channel_id=CHANNEL_ID,
-                    job_data=job,
-                    description=description
-                )
-                
-                if edit_result["status"] == "success":
-                    # Send the message to user asking for feedback
-                    message = f"✏ <@{user_id}>, I'm ready to help you edit the job description. Please tell me what changes you'd like to make (e.g., 'Change the title to Senior Developer' or 'Update skills to include React')."
-                    send_slack_message(message)
-                    state["error"] = None
-                    state["edit_workflow_active"] = True
-                else:
-                    state["error"] = f"Failed to initiate edit: {edit_result['message']}"
-            else:
-                state["error"] = "Missing user information for edit workflow"
+            
+            
+            state["error"] = "EDIT Started"
 
 
         elif action =="draft":

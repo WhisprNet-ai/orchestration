@@ -787,7 +787,7 @@ def intent_entity_extractor(message) -> str:
     # Setup NVIDIA LLM
     formatter_llm = ChatNVIDIA(
         model="meta/llama3-70b-instruct",
-        api_key="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"
+        api_key=os.getenv("NVIDIA_API_KEY")
     )
 
     try:

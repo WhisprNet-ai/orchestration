@@ -12,7 +12,7 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.documents import Document
 from .retrieval.vectorstore import get_vectorstore
 from intent_entity_extractor.extractor import intent_entity_processor
-
+from edit_rag import edit_formatter
 import sys
 import os
 
@@ -29,7 +29,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 # Shared LLM for formatting
 formatter_llm = ChatNVIDIA(
     model="meta/llama3-70b-instruct",
-    api_key="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"
+    api_key=os.getenv("NVIDIA_API_KEY")
 )
 
 # Enhanced formatting prompt for batching with past request detection
@@ -93,7 +93,7 @@ Combined Output:
 def get_rag_chain(user_id: str):
     llm = ChatNVIDIA(
         model="meta/llama3-70b-instruct",
-        api_key="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"
+        api_key=os.getenv("NVIDIA_API_KEY")
     )
     vectorstore = get_vectorstore()
 
@@ -275,9 +275,39 @@ def process_messages(json_data: dict, slack_handler=None) -> list:
                 "channel_id": msg.get("channel_id", ""),
                 "session_id": msg.get("session_id", "")
             }
-
+    edit_mode_path = os.path.join(project_root, 'edit_mode.json')
+    try:
+        with open(edit_mode_path, 'r') as f:  
+            content = f.read().strip()
+            if not content:
+                # File is empty, initialize with empty dict
+                edit_mode = {}
+            else:
+                edit_mode = json.loads(content)
+    except FileNotFoundError:
+        # File doesn't exist, create with empty dict
+        edit_mode = {}
+        with open(edit_mode_path, 'w') as f:
+            json.dump(edit_mode, f)
+    except json.JSONDecodeError as e:
+        print(f"Warning: Invalid JSON in edit_mode.json: {e}")
+        edit_mode = {}
+    print(edit_mode)
     for user_id, message_list in user_messages.items():
         try:
+            if user_id in edit_mode and edit_mode[user_id]["status"]==True:
+                reply = ''.join(i for i in message_list)
+
+                pre_msg= edit_mode[user_id]["message"]
+                edit_formatter.run_job_rewrite_pipeline(user_id, reply,pre_msg,user_meta[user_id]["username"])
+                print(f"🔍 User {user_id} is in edit mode")
+                print(f"   - Original messages: {message_list}")
+                print(f"   - Edit mode: {edit_mode[user_id]}")
+                print(f"   - Reply: {reply}")
+                print(f"   - Pre message: {pre_msg}")
+                print(f"   - User name: {user_meta[user_id]['username']}")
+                continue
+                
             # Check if this is a specific job action - if so, bypass formatter LLM
             is_specific_action = is_specific_job_action(message_list)
             print(f"🔍 Is specific job action for user {user_id}: {is_specific_action}")
