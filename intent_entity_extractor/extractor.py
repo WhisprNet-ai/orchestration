@@ -235,7 +235,7 @@ def handle_specific_job_action(message_text, user_data, slack_handler):
                 
                 # Call send_job_desc to show the job with approval buttons
                 try:
-                    from maya_agent.slack_button import send_job_desc
+                    from maya_agent.slack_button_n import send_job_desc
                     action = send_job_desc(channel_id, description, job_id, username, user_id)
                     
                     # Handle the user's response - same logic as in naveens_agent.py
@@ -463,31 +463,31 @@ def handle_past_request(response_dict, user_data, slack_handler):
                          "• Say something like: \"I need to hire a Python developer\"\n" \
                          "• I'll help you create your first job posting!"
         
-        elif request_type == 'edit':
-            # Show drafts with edit instructions - USE SUMMARY FORMAT
-            drafts = get_user_drafts(user_id, limit=5)
-            edit_requests = get_user_edit_requests(user_id, limit=3)
+        # elif request_type == 'edit':
+        #     # Show drafts with edit instructions - USE SUMMARY FORMAT
+        #     drafts = get_user_drafts(user_id, limit=5)
+        #     edit_requests = get_user_edit_requests(user_id, limit=3)
             
-            message = f"✏️ **Edit Your Job Postings**\n\n"
+        #     message = f"✏️ **Edit Your Job Postings**\n\n"
             
-            if drafts:
-                message += f"📋 **Your Recent Jobs:**\n"
-                for draft in drafts:
-                    message += format_draft_summary(draft) + "\n"
+        #     if drafts:
+        #         message += f"📋 **Your Recent Jobs:**\n"
+        #         for draft in drafts:
+        #             message += format_draft_summary(draft) + "\n"
                 
-                message += f"\n💡 **To edit:** Say `edit {drafts[0].get('job_id', 'job_id')}` with your changes\n"
+        #         message += f"\n💡 **To edit:** Say `edit {drafts[0].get('job_id', 'job_id')}` with your changes\n"
             
-            if edit_requests:
-                message += f"\n🔄 **Pending Edit Requests:**\n"
-                for edit_req in edit_requests:
-                    job_id = edit_req.get('job_id', 'unknown')
-                    status = edit_req.get('edit_status', 'unknown')
-                    status_emoji = {'pending': '⏳', 'processing': '🔄', 'completed': '✅'}.get(status, '❓')
-                    message += f"• {status_emoji} {job_id} - {status.title()}\n"
+        #     if edit_requests:
+        #         message += f"\n🔄 **Pending Edit Requests:**\n"
+        #         for edit_req in edit_requests:
+        #             job_id = edit_req.get('job_id', 'unknown')
+        #             status = edit_req.get('edit_status', 'unknown')
+        #             status_emoji = {'pending': '⏳', 'processing': '🔄', 'completed': '✅'}.get(status, '❓')
+        #             message += f"• {status_emoji} {job_id} - {status.title()}\n"
             
-            if not drafts and not edit_requests:
-                message += "📭 No job postings found to edit.\n"
-                message += "Create a job posting first, then you can edit it!"
+        #     if not drafts and not edit_requests:
+        #         message += "📭 No job postings found to edit.\n"
+        #         message += "Create a job posting first, then you can edit it!"
         
         elif request_type == 'delete':
             # Show drafts with delete instructions - USE SUMMARY FORMAT
@@ -532,7 +532,7 @@ def handle_past_request(response_dict, user_data, slack_handler):
             
             message += f"\n💡 **Quick Actions:**\n"
             message += f"• `show job_id` - View full details\n"
-            message += f"• `edit job_id` - Modify a posting\n"
+            # message += f"• `edit job_id` - Modify a posting\n"
             message += f"• `delete job_id` - Remove a posting"
         
         else:
@@ -544,7 +544,7 @@ def handle_past_request(response_dict, user_data, slack_handler):
             message += f"🎯 **What I can help you with:**\n"
             message += f"• 👀 **View** - `show my posts`\n"
             message += f"• 📄 **Details** - `show job_123`\n"
-            message += f"• ✏️ **Edit** - `edit job_123`\n" 
+            # message += f"• ✏️ **Edit** - `edit job_123`\n" 
             message += f"• 🗑️ **Delete** - `delete job_123`\n"
             message += f"• 📋 **List** - `list all jobs`\n\n"
             message += f"Just tell me what you'd like to do!"
@@ -633,12 +633,10 @@ def handle_non_hiring_request(response_dict, user_data, slack_handler):
     if slack_handler and user_data.get('channel_id'):
         try:
             help_msg = f"Hi {username}! 👋\n\n" \
-                      "I'm here to help with job posting requests. I can:\n" \
+                      "I'm maya and i am here to help with your job posting requests. I can:\n" \
                       "• 💼 Create new job postings\n" \
                       "• 📋 Show your past job requests\n" \
-                      "• ✏️ Edit existing postings\n" \
                       "• 🗑️ Delete old postings\n" \
-                      "• 📄 View detailed job information\n\n" \
                       "How can I assist you with your hiring needs?"
             
             slack_handler._post_response(
@@ -718,22 +716,22 @@ def intent_entity_processor(data, slack_handler=None):
     print("="*80)
 
 def intent_entity_extractor(message) -> str:
-    """Extract intent and entities from user message using enhanced prompt"""
+    """Extract intent and entities from user message using enhanced prompt with job normalization"""
     print("🔍 Processing intent entity extraction...")
     print(f"Input message: {message}")
     print("####")
     
-    # Enhanced prompt template with past_request detection
+    # Enhanced prompt template with job normalization and past_request detection
     prompt = ChatPromptTemplate.from_template("""
     CONVERSATION:
     {message_batch}
 
-    TASK: Analyze the conversation and extract the following information in JSON format:
+    TASK: Analyze the conversation and extract the following information in JSON format with intelligent job normalization:
 
     {{
      "intent": "hiring_request" | "past_request" | "non_hiring",
      "entities": {{
-         "job_title": "exact job title mentioned or null",
+         "job_title": "normalized job title with experience level prefix or null",
          "skills": "comma-separated list of required skills or null",
          "experience": "experience requirement (e.g., '3+ years', 'Senior level') or null",
          "location": "job location (city, state, hybrid) or null",
@@ -743,6 +741,57 @@ def intent_entity_extractor(message) -> str:
          "request_type": "show | edit | delete | list | null"
      }}
      }}
+
+    JOB NORMALIZATION RULES:
+    Apply these normalization rules when extracting job_title:
+
+    1. SKILL-TO-JOB-TITLE MAPPING:
+       - UI/UX, Figma, Adobe XD, Sketch, Prototyping, User Research → "Designer"
+       - React, Angular, Vue, JavaScript, TypeScript, HTML, CSS → "Frontend Developer"
+       - Node.js, Express, Django, Flask, FastAPI, Spring Boot → "Backend Developer"
+       - React + Node.js/Django/Flask → "Full Stack Developer"
+       - Python, Machine Learning, TensorFlow, PyTorch, Data Science → "Data Scientist"
+       - SQL, MongoDB, PostgreSQL, MySQL, Database → "Database Developer"
+       - Unity, Unreal Engine, C#, Game Development → "Game Developer"
+       - Swift, iOS, Xcode, Objective-C → "iOS Developer"
+       - Kotlin, Java, Android Studio → "Android Developer"
+       - React Native, Flutter, Ionic → "Mobile Developer"
+       - AWS, Azure, GCP, Docker, Kubernetes, DevOps → "DevOps Engineer"
+       - Cybersecurity, Penetration Testing, Security → "Security Engineer"
+       - QA, Testing, Selenium, Automation → "QA Engineer"
+       - Project Management, Scrum, Agile → "Project Manager"
+       - Digital Marketing, SEO, SEM, Social Media → "Marketing Specialist"
+       - Sales, CRM, Lead Generation → "Sales Representative"
+       - Content Writing, Copywriting, Blog Writing → "Content Writer"
+       - Video Editing, After Effects, Premiere Pro → "Video Editor"
+       - Blockchain, Solidity, Web3, Cryptocurrency → "Blockchain Developer"
+       - AI, NLP, Computer Vision, Deep Learning → "AI Engineer"
+
+    2. EXPERIENCE LEVEL PREFIXES:
+       Based on experience mentioned, add appropriate prefix:
+       - 0-2 years OR "fresher" OR "entry level" → "Junior [Job Title]"
+       - 3-5 years OR "mid level" → "Mid-level [Job Title]"
+       - 5+ years OR "senior" OR "lead" → "Senior [Job Title]"
+       - 8+ years OR "principal" OR "architect" → "Lead [Job Title]"
+       - 10+ years OR "manager" OR "head" → "Principal [Job Title]"
+
+    3. TITLE NORMALIZATION EXAMPLES:
+       - "We need someone with UI/UX skills, 3 years experience" → "Mid-level Designer"
+       - "Looking for React developer with 5+ years" → "Senior Frontend Developer"
+       - "Need Unreal Engine developer" → "Game Developer"
+       - "Hiring Python ML engineer, fresher welcome" → "Junior Data Scientist"
+       - "Senior backend developer with Node.js" → "Senior Backend Developer"
+       - "Full stack developer React + Django 4 years" → "Mid-level Full Stack Developer"
+       - "iOS developer with Swift, entry level" → "Junior iOS Developer"
+       - "DevOps engineer with AWS experience" → "DevOps Engineer"
+       - "Need game developer with Unity" → "Game Developer"
+       - "Marketing person for digital campaigns" → "Marketing Specialist"
+
+    4. SKILL REFINEMENT:
+       When normalizing, also clean up the skills list:
+       - Remove redundant mentions of the main technology
+       - Group related technologies together
+       - Keep specific frameworks and tools mentioned
 
     GUIDELINES:
     - Set intent to "hiring_request" if discussing NEW job postings, recruitment, or hiring needs
@@ -760,7 +809,16 @@ def intent_entity_extractor(message) -> str:
     - For skills, include both technical and soft skills mentioned
     - For experience, capture years, level (junior/senior), or specific requirements
     - For location, include remote work arrangements if mentioned
+    - ALWAYS apply job normalization rules when a job title can be inferred from skills or when skills suggest a different/better job title
+    - If original job title conflicts with skills, prioritize skills-based normalization
     - Be precise - don't infer or assume information not explicitly stated
+
+    NORMALIZATION PRIORITY:
+    1. If skills clearly indicate a specific role, use that role as job_title
+    2. Add experience level prefix based on years/level mentioned
+    3. If user provides both title and conflicting skills, skills take priority
+    4. If no clear skills but title is provided, normalize the title format
+    5. If neither clear title nor skills, use null
 
     PAST REQUEST INDICATORS (should trigger "past_request" intent):
     - "show me my old posts", "previous job postings", "past requests"
@@ -781,6 +839,10 @@ def intent_entity_extractor(message) -> str:
     - Support questions: "help", "how does this work", "what can you do"
     - Unrelated topics that don't involve jobs or hiring
 
+    IMPORTANT OUTPUT REQUIREMENTS:
+    - Return ONLY the JSON object, no markdown formatting
+    - Do NOT wrap the response in json or  tags
+                                              
     RESPONSE: Return only valid JSON, no additional text:
     """)
 

@@ -3,10 +3,59 @@ import json
 from dotenv import load_dotenv
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain.prompts import ChatPromptTemplate
-
+from rag_it1.retrieval.vectorstore import get_vectorstore
 from edit_rag.slack_button import send_job_desc
-load_dotenv()
+import requests
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+from threading import Thread
+from edit_rag.slack_button import app as slack_app, SLACK_APP_TOKEN 
 
+Thread(target=lambda: SocketModeHandler(slack_app, SLACK_APP_TOKEN).start(), daemon=True).start()
+env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+
+from maya_agent.database import insert_draft
+# Step 2: load the .env file
+load_dotenv(dotenv_path=env_path)
+
+LINKEDIN_ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN")
+PERSON_URN = os.getenv("PERSON_URN")
+SLACK_BOT = os.getenv("SLACK_BOT_TOKEN")
+
+def send_slack_message(text):#Add Channel_id as a paramater
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT}",
+        "Content-Type": "application/json; charset=utf-8"
+    }
+    
+    data = {
+        "channel": "C094K04Q5ED",
+        "text": text,
+    }
+    print("C094K04Q5ED")
+    response = requests.post("https://slack.com/api/chat.postMessage", json=data, headers=headers)#Add username and user_id
+ 
+    return response.json()
+
+
+
+
+
+def delete_user_data(user_id: str):
+    """
+    Delete all documents from the vectorstore associated with a given user_id.
+    """
+    try:
+        vectorstore = get_vectorstore()
+        collection = vectorstore._collection  # Low-level access to Chroma collection
+
+        # Perform deletion based on metadata filter
+        deleted = collection.delete(where={"user_id": user_id})
+
+        print(f"✅ Successfully deleted data for user_id: {user_id}")
+        return {"status": "success", "user_id": user_id, "deleted": deleted}
+    except Exception as e:
+        print(f"❌ Failed to delete data for user_id: {user_id} - {str(e)}")
+        return {"status": "error", "user_id": user_id, "error": str(e)}
 
 def load_job_store(file_path="job_store.json"):
     if not os.path.exists(file_path):
@@ -79,8 +128,62 @@ Updated Job Description:
 # ========================
 # MAIN EXECUTION
 # ========================
+def post_job_to_linkedin(user_id,user_name,result):
+    print("🚀 [post_job_to_linkedin]")
 
-    
+
+    post_text = (
+        f"🚀 New Job Opportunity!\n\n"
+        # f"📌 Title: {job_title}\n"
+        # f"🧠 Experience: {experience}\n"
+        # f"📍 Location: {location}\n"
+        # f"🛠 Skills: {skills}\n\n"
+        f"{result}\n\n"
+        "#Hiring #JobOpening #Careers"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0"
+    }
+
+    payload = {
+        "author": PERSON_URN,
+        "lifecycleState": "PUBLISHED",
+        "specificContent": {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary": {"text": post_text},
+                "shareMediaCategory": "NONE"
+            }
+        },
+        "visibility": {
+            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+        }
+    }
+
+    try:
+        res = requests.post("https://api.linkedin.com/v2/ugcPosts", headers=headers, json=payload)
+
+        if res.status_code == 201:
+            post_id = res.headers.get("x-restli-id", "unknown")
+            post_url = f"@{user_name} -> https://www.linkedin.com/feed/update/{post_id}"
+           
+            print("jobposting url:")
+            print(post_url)
+            print("####")
+            # ✅ Send to Slack
+            slack_message = f"✅ Job posted successfully! <@{user_id}>, here’s your LinkedIn link:\nhttps://www.linkedin.com/feed/update/{post_id}"
+
+            send_slack_message(slack_message)
+
+        else:
+            print( f"❌ Failed: {res.status_code} - {res.text}")
+
+    except Exception as e:
+        print( f"❌ Exception: {e}")
+
+  
 def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
     
 
@@ -115,40 +218,68 @@ def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
     # Write back to file
     with open(edit_mode_path, 'w') as f:
         json.dump(edit_mode, f, indent=2)
-    send_edited_job_to_slack(channel_id, result, job_id, user_name, user_id)
+    action = send_job_desc(channel_id, result, job_id, user_name, user_id)
+    print(action)
+    print(f"📤 Sending updated job description to Slack | job_id: {job_id}")
+    
+    if action == "approve":
+        print("✅ Approved by user. Proceeding...")
+        if user_id:
+            delete_user_data(user_id)
+        post_job_to_linkedin(user_id,user_name,result)
+        
+    elif action == "reject":
+        print("🧹 User rejected. Resetting memory and halting job.")
+        if user_id:
+            delete_user_data(user_id)
+        print(f"User selected: {action}")
+
+    elif action =="edit":
+        print("User clicked edit, initiating edit workflow")
+     
+        print( "EDIT Started")
 
 
-# ========================
-# SEND EDITED JOB TO SLACK
-# ========================
-def send_edited_job_to_slack(channel_id, updated_job_desc, job_id, user_name, user_id):
-    """
-    Function similar to send_job_desc but for edited job descriptions
-    Posts the updated job description to Slack with approval buttons
-    """
-    try:
+    elif action =="draft":
+        print("User selected draft, sent to draft function")
+        # insert_draft(
+        #     job_id=job_id,  # ← you already generated it before calling send_job_desc
+        #     user_id=user_id,
+        #     username=user_name,
+        #     channel_id=CHANNEL_ID,
+        #     job_data=job,
+        #     description=description
+        # )
+        if user_id:
+            delete_user_data(user_id)
         
+        # # Send confirmation message to Slack
+        # draft_confirmation = f"✅ <@{user_id}>, your job posting has been saved as a draft!\n\n" \
+        #                     f"📋 **Draft Details:**\n" \
+        #                     f"• Job Title: {job.get('job_title', 'N/A')}\n" \
+        #                     f"• Company: {job.get('company', 'N/A')}\n" \
+        #                     f"• Job ID: `{job_id}`\n\n" \
+                        #    f"💡 **To manage your drafts:**\n" \
+                        #    f"• Say \"show my posts\" to view all your drafts\n" \
+                        #    f"• Say \"edit {job_id}\" to modify this draft\n" \
+                        #    f"• Say \"delete {job_id}\" to remove this draft"
         
-        print(f"📤 Sending updated job description to Slack | job_id: {job_id}")
-        
-        # Call the existing send_job_desc function with updated description
-        action = send_job_desc(channel_id, updated_job_desc, job_id, user_name, user_id)
-        
-        print(f"✅ User response for updated job_id {job_id}: {action}")
-        return action
-        
-    except Exception as e:
-        print(f"❌ Error sending edited job to Slack: {e}")
-        return "error"
-   
+        # send_slack_message(draft_confirmation)
+        # # Set error to stop workflow from proceeding to LinkedIn posting
+        # state["error"] = f"User selected: {action}"
+        # state["job_result"] = f"Draft saved successfully: {job_id}"
+        print("Edit clicked")
 
-# Run only if script is executed directly
-if __name__ == "__main__":
-    user_id='12122'
-    user_name='manoj'
-    reply='change year of experience to 3 years'
-    job_desc="Hey <@U09359UUX8X>, here's your job description:\n\n**Senior Backend Developer**\nWe are looking for a skilled Backend Developer with 5 years of experience in Python.\n**Requirements:**\n- Python programming\n- Database management\n- API development\n\n**Job Type:** Full-time\n\nDoes this look okay?"
-    output = run_job_rewrite_pipeline(user_id, reply,job_desc,user_name)
-    if output:
-        print("\n Final Output:\n")
-        print(output)
+
+
+
+# # Run only if script is executed directly
+# if __name__ == "__main__":
+#     user_id='12122'
+#     user_name='manoj'
+#     reply='change year of experience to 3 years'
+#     job_desc="Hey <@U09359UUX8X>, here's your job description:\n\n**Senior Backend Developer**\nWe are looking for a skilled Backend Developer with 5 years of experience in Python.\n**Requirements:**\n- Python programming\n- Database management\n- API development\n\n**Job Type:** Full-time\n\nDoes this look okay?"
+#     output = run_job_rewrite_pipeline(user_id, reply,job_desc,user_name)
+#     if output:
+#         print("\n Final Output:\n")
+#         print(output)

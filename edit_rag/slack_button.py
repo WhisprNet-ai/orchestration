@@ -44,10 +44,10 @@ def update_edit_mode(user_id, message):
     else:
         print(f"❌ Failed to update edit_mode.json for user {user_id}")
 
-@app.action("approve_click")
-@app.action("reject_click")
-@app.action("edit_click")
-@app.action("draft_click")
+@app.action("approve")
+@app.action("reject")
+@app.action("edit")
+@app.action("draft")
 def handle_button_click(ack, body, client, action):
     ack()
 
@@ -70,13 +70,16 @@ def handle_button_click(ack, body, client, action):
 
     print(f"🖱 Button clicked: {clicked_action} for job_id: {job_id} by @{user_name}")
 
-    if clicked_action == "approve_click":
+    if clicked_action == "approve":
         result_text = f"✅ Thanks for the confirmation, <@{user_id}>. I'm now posting the job on LinkedIn."
         response_values[job_id] = "approve"
-    elif clicked_action == "reject_click":
+        print("send-----------------------------------------------------------------------")
+
+    elif clicked_action == "reject":
         result_text = f"❌ No worries <@{user_id}>, I’ve canceled the posting."
         response_values[job_id] = "reject"
-    elif clicked_action == "edit_click":
+
+    elif clicked_action == "edit":
         # Get the original job description from job storage
         original_message = job_storage.get(job_id, "")
         # Update edit_mode.json
@@ -84,7 +87,7 @@ def handle_button_click(ack, body, client, action):
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
 
-    elif clicked_action == "draft_click":
+    elif clicked_action == "draft  ":
         result_text = f"📋 Got it <@{user_id}>, I'm saving this as a draft. You'll get a confirmation shortly."
         response_values[job_id] = "draft"
     else:
@@ -92,6 +95,7 @@ def handle_button_click(ack, body, client, action):
         response_values[job_id] = "unknown"
 
     # Unblock the waiting thread
+    print(job_id,"_--------------------------------------------------------------------------------------")
     if job_id in response_events:
         response_events[job_id].set()
 
@@ -137,10 +141,10 @@ def send_job_desc(CHANNEL_ID, JOB_DESC, job_id, user_name, user_id):
                 "type": "actions",
                 "block_id": block_metadata,  # embedded job_id + user_name
                 "elements": [
-                    {"type": "button", "text": {"type": "plain_text", "text": "Yes"}, "action_id": "approve_click"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "No"}, "action_id": "reject_click"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Edit"}, "action_id": "edit_click"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Draft"}, "action_id": "draft_click"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Yes"}, "action_id": "approve"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "No"}, "action_id": "reject"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Edit"}, "action_id": "edit"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Draft"}, "action_id": "draft"},
 
                 ]
             }

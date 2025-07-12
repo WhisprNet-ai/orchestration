@@ -17,9 +17,9 @@ import requests
 from langgraph.graph import StateGraph, START, END
 import uuid
 from threading import Thread
-from maya_agent.slack_button import app as slack_app, SLACK_APP_TOKEN  # ← re-use from slack_button.py
+from maya_agent.slack_button_n import app as slack_app, SLACK_APP_TOKEN  # ← re-use from slack_button.py
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-from maya_agent.slack_button import send_job_desc
+from maya_agent.slack_button_n import send_job_desc
 from rag_it1.retrieval.vectorstore import get_vectorstore
 from maya_agent.database import insert_draft
 
@@ -169,7 +169,7 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
         elif action =="edit":
             print("User clicked edit, initiating edit workflow")
             
-            
+            print("COMING HERE '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''")
             state["error"] = "EDIT Started"
 
 
@@ -188,14 +188,14 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
             
             # Send confirmation message to Slack
             draft_confirmation = f"✅ <@{user_id}>, your job posting has been saved as a draft!\n\n" \
-                               f"📋 **Draft Details:**\n" \
+                               f"📋 Draft Details:\n" \
                                f"• Job Title: {job.get('job_title', 'N/A')}\n" \
                                f"• Company: {job.get('company', 'N/A')}\n" \
                                f"• Job ID: `{job_id}`\n\n" \
-                               f"💡 **To manage your drafts:**\n" \
-                               f"• Say \"show my posts\" to view all your drafts\n" \
-                               f"• Say \"edit {job_id}\" to modify this draft\n" \
-                               f"• Say \"delete {job_id}\" to remove this draft"
+                            #    f"💡 **To manage your drafts:**\n" \
+                            #    f"• Say \"show my posts\" to view all your drafts\n" \
+                            #    f"• Say \"edit {job_id}\" to modify this draft\n" \
+                            #    f"• Say \"delete {job_id}\" to remove this draft"
             
             send_slack_message(draft_confirmation)
             # Set error to stop workflow from proceeding to LinkedIn posting

@@ -147,7 +147,7 @@ def send_updated_job_to_slack(channel_id: str, updated_description: str,
         True if sent successfully, False otherwise
     """
     try:
-        from maya_agent.slack_button import send_job_desc
+        from maya_agent.slack_button_n import send_job_desc
         
         # Generate new job ID for the updated description
         job_id = str(uuid.uuid4())[:8]

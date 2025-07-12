@@ -96,6 +96,7 @@ def handle_button_click(ack, body, client, action):
         
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
+        
     elif clicked_action == "draft_click":
         result_text = f"📋 Got it <@{user_id}>, I'm saving this as a draft. You'll get a confirmation shortly."
         response_values[job_id] = "draft"
