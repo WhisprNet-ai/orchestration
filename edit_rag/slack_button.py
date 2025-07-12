@@ -47,7 +47,7 @@ def update_edit_mode(user_id, message):
 @app.action("approve")
 @app.action("reject")
 @app.action("edit")
-@app.action("draft")
+@app.action("draft_opt")
 def handle_button_click(ack, body, client, action):
     ack()
 
@@ -87,7 +87,7 @@ def handle_button_click(ack, body, client, action):
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"
 
-    elif clicked_action == "draft  ":
+    elif clicked_action == "draft_opt":
         result_text = f"📋 Got it <@{user_id}>, I'm saving this as a draft. You'll get a confirmation shortly."
         response_values[job_id] = "draft"
     else:
@@ -144,7 +144,7 @@ def send_job_desc(CHANNEL_ID, JOB_DESC, job_id, user_name, user_id):
                     {"type": "button", "text": {"type": "plain_text", "text": "Yes"}, "action_id": "approve"},
                     {"type": "button", "text": {"type": "plain_text", "text": "No"}, "action_id": "reject"},
                     {"type": "button", "text": {"type": "plain_text", "text": "Edit"}, "action_id": "edit"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "Draft"}, "action_id": "draft"},
+                    {"type": "button", "text": {"type": "plain_text", "text": "Draft"}, "action_id": "draft_opt"},
 
                 ]
             }

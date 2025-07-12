@@ -12,11 +12,11 @@ from edit_rag.slack_button import app as slack_app, SLACK_APP_TOKEN
 
 Thread(target=lambda: SocketModeHandler(slack_app, SLACK_APP_TOKEN).start(), daemon=True).start()
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
-
 from maya_agent.database import insert_draft
+
 # Step 2: load the .env file
 load_dotenv(dotenv_path=env_path)
-
+CHANNEL_ID= None
 LINKEDIN_ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN")
 PERSON_URN = os.getenv("PERSON_URN")
 SLACK_BOT = os.getenv("SLACK_BOT_TOKEN")
@@ -28,10 +28,10 @@ def send_slack_message(text):#Add Channel_id as a paramater
     }
     
     data = {
-        "channel": "C094K04Q5ED",
+        "channel": CHANNEL_ID,
         "text": text,
     }
-    print("C094K04Q5ED")
+    print(CHANNEL_ID)
     response = requests.post("https://slack.com/api/chat.postMessage", json=data, headers=headers)#Add username and user_id
  
     return response.json()
@@ -184,16 +184,16 @@ def post_job_to_linkedin(user_id,user_name,result):
         print( f"❌ Exception: {e}")
 
   
-def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
+def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name,channel_id):
     
 
     result = alter_job_description(reply,job_desc)
-    
+    CHANNEL_ID=channel_id
     result=result["new_job_description"]
     print("\n Altered job description processed")
     import uuid
     job_id = str(uuid.uuid4())[:8] 
-    channel_id='C094K04Q5ED'
+   
     # Fix file path to access edit_mode.json from root directory
     edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
     
@@ -204,16 +204,33 @@ def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
                 edit_mode = {}
             else:
                 edit_mode = json.loads(content)
+
     except FileNotFoundError:
         edit_mode = {}
     except json.JSONDecodeError as e:
         print(f"Warning: Invalid JSON in edit_mode.json: {e}")
         edit_mode = {}
     
+
+
+    job=edit_mode[user_id]["job_data"]
+
+
+
+    # use this channelid if there is an error in edge case
+
+    # CHANNEL_ID= edit_mode[user_id]["channel_id"]
+
+
+
     # Reset user's edit mode
     if user_id in edit_mode:
         edit_mode[user_id]["status"] = False
         edit_mode[user_id]["message"] = "null"
+        edit_mode[user_id]["job_id"]="null"
+        edit_mode[user_id]["channel_id"]="null"
+        edit_mode[user_id]["user_name"]="null"
+        edit_mode[user_id]["job_data"]="null"
     
     # Write back to file
     with open(edit_mode_path, 'w') as f:
@@ -242,14 +259,14 @@ def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
 
     elif action =="draft":
         print("User selected draft, sent to draft function")
-        # insert_draft(
-        #     job_id=job_id,  # ← you already generated it before calling send_job_desc
-        #     user_id=user_id,
-        #     username=user_name,
-        #     channel_id=CHANNEL_ID,
-        #     job_data=job,
-        #     description=description
-        # )
+        insert_draft(
+            job_id=job_id,  # ← you already generated it before calling send_job_desc
+            user_id=user_id,
+            username=user_name,
+            channel_id=CHANNEL_ID,
+            job_data=job,
+            description=result
+        )
         if user_id:
             delete_user_data(user_id)
         
@@ -269,8 +286,6 @@ def run_job_rewrite_pipeline(user_id, reply,job_desc,user_name):
         # state["error"] = f"User selected: {action}"
         # state["job_result"] = f"Draft saved successfully: {job_id}"
         print("Edit clicked")
-
-
 
 
 # # Run only if script is executed directly

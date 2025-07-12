@@ -65,34 +65,36 @@ def handle_button_click(ack, body, client, action):
         response_values[job_id] = "reject"
     elif clicked_action == "edit_click":
         # Get the original job description from job storage
-        original_job_desc = job_storage.get(job_id, "")
+        # original_job_desc = job_storage.get(job_id, "")
         
-        # Fix the file path to access edit_mode.json from root directory
-        edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
-        try:
-            with open(edit_mode_path,'r') as f:
-                content = f.read().strip()
-                if not content:
-                    # File is empty, initialize with empty dict
-                    edit_mode = {}
-                else:
-                    edit_mode = json.loads(content)
-        except FileNotFoundError:
-            # File doesn't exist, create with empty dict
-            edit_mode = {}
-        except json.JSONDecodeError as e:
-            print(f"Warning: Invalid JSON in edit_mode.json: {e}")
-            edit_mode = {}
+        # # Fix the file path to access edit_mode.json from root directory
+        # edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
+        # try:
+        #     with open(edit_mode_path,'r') as f:
+        #         content = f.read().strip()
+        #         if not content:
+        #             # File is empty, initialize with empty dict
+        #             edit_mode = {}
+        #         else:
+        #             edit_mode = json.loads(content)
+        # except FileNotFoundError:
+        #     # File doesn't exist, create with empty dict
+        #     edit_mode = {}
+        # except json.JSONDecodeError as e:
+        #     print(f"Warning: Invalid JSON in edit_mode.json: {e}")
+        #     edit_mode = {}
         
-        # Store both status and the original message to be edited
-        edit_mode[user_id] = {
-            "status": True,
-            "message": original_job_desc,
-            "job_id": job_id
-        }
+        # # Store both status and the original message to be edited
+        # edit_mode[user_id] = {
+        #     "status": True,
+        #     "message": original_job_desc,
+        #     "job_id": job_id,
+        #     "channel_id":channel_id,
+        #     "user_name":user_name
+        # }
         
-        with open(edit_mode_path,'w') as f:
-            json.dump(edit_mode,f)
+        # with open(edit_mode_path,'w') as f:
+        #     json.dump(edit_mode,f)
         
         result_text = f"✏ Got it <@{user_id}>, I've marked this for editing. Please provide the necessary changes."
         response_values[job_id] = "edit"

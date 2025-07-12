@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import os
 import re
-
+from maya_agent.database import get_latest_user_draft
 # Initialize logger
 logger = logging.getLogger(__name__)
 
@@ -276,13 +276,17 @@ def handle_specific_job_action(message_text, user_data, slack_handler):
                         except Exception as e:
                             print(f"❌ Error posting to LinkedIn: {e}")
                             message = f"❌ <@{user_id}>, there was an error posting to LinkedIn."
+                            
+                        from maya_agent.naveens_agent import delete_user_data
+                        delete_user_data(user_id)
+                        delete_user_draft(job_id, user_id)
                         
                         slack_handler._post_response(
                             channel_id=channel_id,
                             thread_ts=user_data.get('thread_ts'),
                             text=message
                         )
-                        
+                            
                     elif action == "reject":
                         print("🧹 User rejected. Resetting memory and halting job.")
                         # Delete user data from vectorstore
@@ -301,30 +305,64 @@ def handle_specific_job_action(message_text, user_data, slack_handler):
                         
                     elif action == "edit":
                         print("User clicked edit, initiating edit workflow")
+
+                        # get job title, company,experience,location,skills
+                        job = get_latest_user_draft(user_id)
+
+                        # Fix the file path to access edit_mode.json from root directory
+                        edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
                         try:
-                            from maya_agent.edit_pipeline import initiate_edit_workflow
-                            edit_result = initiate_edit_workflow(
-                                job_id=job_id,
-                                user_id=user_id,
-                                username=username,
-                                channel_id=channel_id,
-                                job_data=target_job,
-                                description=description
-                            )
-                            
-                            if edit_result["status"] == "success":
-                                message = f"✏️ <@{user_id}>, I'm ready to help you edit the job description. Please tell me what changes you'd like to make (e.g., 'Change the title to Senior Developer' or 'Update skills to include React')."
-                            else:
-                                message = f"❌ <@{user_id}>, failed to initiate edit: {edit_result['message']}"
-                        except Exception as e:
-                            print(f"❌ Error initiating edit workflow: {e}")
-                            message = f"❌ <@{user_id}>, there was an error setting up the edit workflow."
+                            with open(edit_mode_path,'r') as f:
+                                content = f.read().strip()
+                                if not content:
+                                    # File is empty, initialize with empty dict
+                                    edit_mode = {}
+                                else:
+                                    edit_mode = json.loads(content)
+                        except FileNotFoundError:
+                            # File doesn't exist, create with empty dict
+                            edit_mode = {}
+                        except json.JSONDecodeError as e:
+                            print(f"Warning: Invalid JSON in edit_mode.json: {e}")
+                            edit_mode = {}
                         
+                        # Store both status and the original message to be edited
+                        edit_mode[user_id] = {
+                            "status": True,
+                            "message": description,
+                            "job_id": job_id,
+                            "channel_id":channel_id,
+                            "user_name":username,
+                            "job_data":job
+                  
+                        }
+                        
+                        with open(edit_mode_path,'w') as f:
+                            json.dump(edit_mode,f)
+                        
+                        # Send the message to user asking for feedback
+                        message = f"✏ <@{user_id}>, I'm ready to help you edit the job description!\n\n"
+                        message += f"**Current Job Details:**\n"
+                        message += f"• Title: {job.get('job_title', 'N/A')}\n"
+                        message += f"• Company: {job.get('company', 'N/A')}\n"
+                        message += f"• Experience: {job.get('experience', 'N/A')}\n"
+                        message += f"• Location: {job.get('location', 'N/A')}\n"
+                        message += f"• Skills: {job.get('skills', 'N/A')}\n\n"
+                        message += f"**What would you like to change?**\n"
+                        message += f"Examples:\n"
+                        message += f"• \"Change the title to Senior Developer\"\n"
+                        message += f"• \"Update skills to include React and Node.js\"\n"
+                        message += f"• \"Change location to Remote\"\n"
+                        message += f"• \"Update experience requirement to 5+ years\"\n"
+                        message += f"• \"Add salary range $80k-$120k\"\n\n"
+                        message += f"Just tell me what you'd like to modify!"
+                                
+                            
                         slack_handler._post_response(
-                            channel_id=channel_id,
-                            thread_ts=user_data.get('thread_ts'),
-                            text=message
-                        )
+                                channel_id=channel_id,
+                                thread_ts=user_data.get('thread_ts'),
+                                text=message
+                            )
                         
                     elif action == "draft":
                         print("User selected draft, saving as draft")

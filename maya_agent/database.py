@@ -186,6 +186,54 @@ def insert_draft(job_id, user_id, username, channel_id, job_data, description):
         logger.error(f"Draft insertion error: {e}")
         return False
 
+def get_latest_user_draft(user_id):
+    """
+    Return only the most recent job draft for a user,
+    including job_title, company, experience, location, and skills.
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT job_title, company, experience, location, skills
+            FROM drafts
+            WHERE user_id = ? AND status = 'active'
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """, (user_id,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            job_title, company, experience, location, skills_raw = row
+
+            # Parse skills
+            try:
+                skills = json.loads(skills_raw) if skills_raw else []
+            except:
+                skills = skills_raw.split(",") if skills_raw else []
+
+            return {
+                "job_title": job_title,
+                "company": company,
+                "experience": experience,
+                "location": location,
+                "skills": skills
+            }
+
+        return {}  # No draft found
+
+    except Exception as e:
+        print(f"❌ Error fetching draft for user {user_id}: {e}")
+        return {}
+
+
+
+
+
+
 def get_draft_by_job_id(job_id):
     """Fetch a single draft using its job_id"""
     try:

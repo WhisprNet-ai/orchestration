@@ -299,7 +299,7 @@ def process_messages(json_data: dict, slack_handler=None) -> list:
                 reply = ''.join(i for i in message_list)
 
                 pre_msg= edit_mode[user_id]["message"]
-                edit_formatter.run_job_rewrite_pipeline(user_id, reply,pre_msg,user_meta[user_id]["username"])
+                edit_formatter.run_job_rewrite_pipeline(user_id, reply,pre_msg,user_meta[user_id]["username"],user_meta[user_id]["channel_id"])
                 print(f"🔍 User {user_id} is in edit mode")
                 print(f"   - Original messages: {message_list}")
                 print(f"   - Edit mode: {edit_mode[user_id]}")

@@ -1,7 +1,7 @@
 import os
 import requests
 from typing import TypedDict, Optional, Any
-
+import json
 from dotenv import load_dotenv
 
 # Step 1: go up one directory level from this script's location
@@ -169,6 +169,54 @@ def job_description_llm(state: AgentState) -> AgentState:#add Channel id as a pa
         elif action =="edit":
             print("User clicked edit, initiating edit workflow")
             
+            
+            # Fix the file path to access edit_mode.json from root directory
+            edit_mode_path = os.path.join(os.path.dirname(__file__), '..', 'edit_mode.json')
+            try:
+                with open(edit_mode_path,'r') as f:
+                    content = f.read().strip()
+                    if not content:
+                        # File is empty, initialize with empty dict
+                        edit_mode = {}
+                    else:
+                        edit_mode = json.loads(content)
+            except FileNotFoundError:
+                # File doesn't exist, create with empty dict
+                edit_mode = {}
+            except json.JSONDecodeError as e:
+                print(f"Warning: Invalid JSON in edit_mode.json: {e}")
+                edit_mode = {}
+            
+            # Store both status and the original message to be edited
+            edit_mode[user_id] = {
+                "status": True,
+                "message": description,
+                "job_id": job_id,
+                "channel_id":CHANNEL_ID,
+                "user_name":user_name,
+                "job_data":job
+            }
+            
+            with open(edit_mode_path,'w') as f:
+                json.dump(edit_mode,f)
+            
+             # Send the message to user asking for feedback
+            message = f"✏ <@{user_id}>, I'm ready to help you edit the job description!\n\n"
+            message += f"**Current Job Details:**\n"
+            message += f"• Title: {job.get('job_title', 'N/A')}\n"
+            message += f"• Company: {job.get('company', 'N/A')}\n"
+            message += f"• Experience: {job.get('experience', 'N/A')}\n"
+            message += f"• Location: {job.get('location', 'N/A')}\n"
+            message += f"• Skills: {job.get('skills', 'N/A')}\n\n"
+            message += f"**What would you like to change?**\n"
+            message += f"Examples:\n"
+            message += f"• \"Change the title to Senior Developer\"\n"
+            message += f"• \"Update skills to include React and Node.js\"\n"
+            message += f"• \"Change location to Remote\"\n"
+            message += f"• \"Update experience requirement to 5+ years\"\n"
+            message += f"• \"Add salary range $80k-$120k\"\n\n"
+            message += f"Just tell me what you'd like to modify!"
+            send_slack_message(message)
             print("COMING HERE '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''")
             state["error"] = "EDIT Started"
 
